@@ -36,10 +36,11 @@ from kivy.graphics.tesselator import TYPE_POLYGONS, WINDING_ODD, Tesselator
 from kivy.metrics import dp
 from kivy.properties import ObjectProperty, StringProperty
 from kivy.utils import get_color_from_hex
+from kivy.uix.behaviors import ButtonBehavior
 
 from kivy_garden.mapview.constants import CACHE_DIR
 from kivy_garden.mapview.downloader import Downloader
-from kivy_garden.mapview.view import MapLayer
+from kivy_garden.mapview.view import MapLayer, MapView
 
 COLORS = {
     'aliceblue': '#f0f8ff',
@@ -203,6 +204,7 @@ class GeoJsonMapLayer(MapLayer):
     cache_dir = StringProperty(CACHE_DIR)
 
     def __init__(self, **kwargs):
+        self.register_event_type('on_touch')
         self.first_time = True
         self.initial_zoom = None
         super().__init__(**kwargs)
@@ -254,6 +256,17 @@ class GeoJsonMapLayer(MapLayer):
                 func(feature)
         elif tp == "Feature":
             func(part)
+
+    def on_touch_up(self, *args):
+        x = args[0].x
+        y = args[0].y
+        view: MapView = self.parent
+        if view.collide_point(x, y):
+            coords = view.get_latlon_at(x, y)
+            self.dispatch('on_touch', coords)
+
+    def on_touch(self, *args):
+        pass
 
     @property
     def bounds(self):
@@ -353,7 +366,8 @@ class GeoJsonMapLayer(MapLayer):
             graphics.append(Color(*color))
             for vertices, indices in tess.meshes:
                 graphics.append(
-                    Mesh(vertices=vertices, indices=indices, mode="triangle_fan")
+                    Mesh(vertices=vertices, indices=indices,
+                         mode="triangle_fan")
                 )
 
         elif tp == "LineString":
@@ -369,7 +383,9 @@ class GeoJsonMapLayer(MapLayer):
     def _lonlat_to_xy(self, lonlats):
         view = self.parent
         zoom = view.zoom
-        for lon, lat in lonlats:
+        for coords in lonlats:
+            lat = coords[0]
+            lon = coords[1]
             p = view.get_window_xy_from(lat, lon, zoom)
             p = p[0] - self.parent.delta_x, p[1] - self.parent.delta_y
             p = self.parent._scatter.to_local(*p)
@@ -378,4 +394,5 @@ class GeoJsonMapLayer(MapLayer):
     def _get_color_from(self, value):
         color = COLORS.get(value.lower(), value)
         color = get_color_from_hex(color)
+        color[3] = .5
         return color
